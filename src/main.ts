@@ -438,6 +438,9 @@ function start() {
   // Start with a little menu tone
   setTimeout(() => audio.playMenuTone(), 420);
 
+  // Start the dark island ambient drone (gives the game atmosphere)
+  setTimeout(() => audio.startAmbient(), 680);
+
   // First frame
   draw();
   updateStatus();

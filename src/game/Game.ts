@@ -102,7 +102,7 @@ export class Game {
     }
 
     if (swung) {
-      audio.swing(arm);
+      audio.swing(arm, power);
 
       const dist = Math.hypot(attacker.x - defender.x, attacker.y - defender.y);
       if (dist < 72) {

@@ -4,6 +4,7 @@ export class RetroAudio {
   private ctx: AudioContext | null = null;
   private enabled = true;
   private masterGain: GainNode | null = null;
+  private ambientNodes: { osc: OscillatorNode; gain: GainNode }[] = [];
 
   private ensureContext() {
     if (this.ctx) return;
@@ -98,37 +99,66 @@ export class RetroAudio {
     return g;
   }
 
-  // === Game-specific sounds ===
+  // === Game-specific sounds — now much more visceral and distinct ===
 
-  swing(arm: 'left' | 'right') {
-    const base = arm === 'left' ? 180 : 240;
-    this.play('sawtooth', base + Math.random() * 40, 0.18, 0.45, 0.003, 0.12, 1400);
-    // whoosh layer
+  swing(arm: 'left' | 'right', power = 1.0) {
+    const isAxe = arm === 'right';
+    const base = isAxe ? 248 : 168;
+    const dur = isAxe ? 0.19 : 0.15;
+
+    // Primary whoosh / chop
+    this.play(isAxe ? 'sawtooth' : 'square', base + Math.random() * 28, dur, 0.42 * power, 0.002, 0.13, isAxe ? 1350 : 980);
+
+    // High metallic ring for axe, duller thud for shield
     setTimeout(() => {
-      if (this.ctx) this.play('sine', base * 1.6, 0.09, 0.22, 0.001, 0.1);
-    }, 12);
+      if (this.ctx) {
+        this.play(isAxe ? 'triangle' : 'sine', base * (isAxe ? 2.05 : 1.45), isAxe ? 0.08 : 0.1, 0.19 * power, 0.001, 0.09);
+      }
+    }, 9);
+
+    // Extra air-rush layer for weight
+    if (isAxe && power > 0.8) {
+      setTimeout(() => {
+        if (this.ctx) this.play('sawtooth', 410, 0.07, 0.16, 0.001, 0.06, 2200);
+      }, 22);
+    }
   }
 
   hit(damage: number) {
-    const intensity = Math.min(1, damage / 6);
-    this.play('square', 80 + intensity * 40, 0.22, 0.7 * intensity, 0.001, 0.18);
-    // meaty crack
+    const i = Math.min(1.0, damage / 5.8);
+    // Deep meaty body impact (low end)
+    this.play('square', 58 + i * 52, 0.27, 0.92 * i, 0.001, 0.24);
+
+    // Sharp crack / bone
     setTimeout(() => {
-      this.play('sawtooth', 160, 0.11, 0.35, 0.001, 0.07, 900);
-    }, 18);
+      this.play('sawtooth', 148 + i * 95, 0.13, 0.48 * i, 0.001, 0.09, 820);
+    }, 13);
+
+    // Wet gore / blood layer on solid hits
+    if (damage > 2.8) {
+      setTimeout(() => {
+        if (this.ctx) this.play('sine', 52, 0.22, 0.55 * i, 0.003, 0.19);
+      }, 32);
+    }
   }
 
   limbSever() {
-    this.play('square', 95, 0.32, 0.85, 0.002, 0.26);
-    setTimeout(() => this.play('sawtooth', 420, 0.14, 0.4, 0.001, 0.12, 650), 25);
-    // wet splat layer
+    // Horrific multi-layered sever: low tear + high shriek + wet impact
+    this.play('square', 78, 0.38, 0.95, 0.001, 0.29);
     setTimeout(() => {
-      if (this.ctx) this.play('sine', 65, 0.28, 0.5, 0.002, 0.2);
-    }, 40);
+      if (this.ctx) this.play('sawtooth', 385, 0.18, 0.6, 0.001, 0.14, 520);
+    }, 18);
+    setTimeout(() => {
+      if (this.ctx) this.play('sine', 58, 0.31, 0.72, 0.002, 0.25);
+    }, 38);
+    // Final ripping tail
+    setTimeout(() => {
+      if (this.ctx) this.play('sawtooth', 195, 0.24, 0.38, 0.001, 0.17, 780);
+    }, 55);
   }
 
   thrust() {
-    this.play('sawtooth', 110, 0.15, 0.5, 0.002, 0.11);
+    this.play('sawtooth', 105, 0.13, 0.42, 0.002, 0.09);
   }
 
   // Very crude "Für Elise" spirit — just a few low beeps for now
@@ -152,13 +182,40 @@ export class RetroAudio {
     });
   }
 
-  // Soft ambient pulse for the island
+  // Brooding low ambient drone for the cursed island — gives the arena soul
   startAmbient() {
-    // placeholder — we can expand this later
+    if (!this.enabled) return;
+    this.ensureContext();
+    if (!this.ctx || !this.masterGain || this.ambientNodes.length > 0) return;
+
+    // Very low, slow, unsettling chord (three detuned voices)
+    const freqs = [36.2, 49.8, 68.5];
+    freqs.forEach((f, idx) => {
+      const osc = this.ctx!.createOscillator();
+      osc.type = (idx === 1) ? 'sine' : 'sawtooth';
+      osc.frequency.value = f + (idx - 1) * 0.6;
+
+      const filt = this.ctx!.createBiquadFilter();
+      filt.type = 'lowpass';
+      filt.frequency.value = 165;
+
+      const g = this.ctx!.createGain();
+      g.gain.value = 0.018 + idx * 0.007;
+
+      osc.connect(filt);
+      filt.connect(g);
+      g.connect(this.masterGain!);
+
+      osc.start();
+      this.ambientNodes.push({ osc, gain: g });
+    });
   }
 
   stopAll() {
-    // For now just let things decay
+    this.ambientNodes.forEach(({ osc }) => {
+      try { osc.stop(0.2); } catch (e) {}
+    });
+    this.ambientNodes = [];
   }
 }
 
