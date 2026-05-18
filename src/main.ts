@@ -9,118 +9,307 @@ const ctx = canvas.getContext('2d', { alpha: true })!;
 const game = new Game();
 let lastTime = performance.now();
 
-function drawMeatling(m: any, color: string, label: string) {
-  const { x, y, angle, limbs } = m;
-  const rad = (angle * Math.PI * 2) / 16;
-  const size = 17;
+// === Particle system for blood & flying limbs ===
+type Particle = {
+  x: number; y: number;
+  vx: number; vy: number;
+  life: number;
+  size: number;
+  color: string;
+  rot?: number;
+  rotSpeed?: number;
+};
 
-  // Body (meat)
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(x, y, size, 0, Math.PI * 2);
-  ctx.fill();
+let particles: Particle[] = [];
 
-  // Head direction indicator
-  const hx = x + Math.cos(rad) * (size + 4);
-  const hy = y + Math.sin(rad) * (size + 4);
-  ctx.fillStyle = limbs.head > 4 ? '#f1f5f9' : '#7f1d1d';
-  ctx.beginPath();
-  ctx.arc(hx, hy, 6, 0, Math.PI * 2);
-  ctx.fill();
+function spawnBlood(x: number, y: number, count: number, spread = 1.8) {
+  for (let i = 0; i < count; i++) {
+    const ang = (Math.random() - 0.5) * Math.PI * spread;
+    const speed = 1.4 + Math.random() * 3.2;
+    particles.push({
+      x, y,
+      vx: Math.cos(ang) * speed,
+      vy: Math.sin(ang) * speed - 0.6,
+      life: 16 + Math.random() * 26,
+      size: 2.2 + Math.random() * 2.8,
+      color: Math.random() > 0.55 ? '#9f1239' : '#7f1d1d'
+    });
+  }
+}
 
-  // Shield arm (left)
-  const leftAng = rad - 0.9;
-  const lx = x + Math.cos(leftAng) * (size + 2);
-  const ly = y + Math.sin(leftAng) * (size + 2);
-  ctx.strokeStyle = limbs.leftShield > 2 ? '#64748b' : '#3f2a1f';
-  ctx.lineWidth = Math.max(2, limbs.leftShield / 3);
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(lx, ly);
-  ctx.stroke();
-
-  // Weapon arm (right)
-  const rightAng = rad + 0.9;
-  const rx = x + Math.cos(rightAng) * (size + 3);
-  const ry = y + Math.sin(rightAng) * (size + 3);
-  ctx.strokeStyle = limbs.weapon > 2 ? '#e2e8f0' : '#3f2a1f';
-  ctx.lineWidth = Math.max(2.5, limbs.weapon / 2.5);
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(rx, ry);
-  ctx.stroke();
-
-  // Label + health
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = '10px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(label, x, y - size - 10);
-
-  // Tiny limb health bars
-  const barY = y + size + 8;
-  const keys: (keyof typeof limbs)[] = ['leftShield', 'weapon'];
-  keys.forEach((k, i) => {
-    const val = limbs[k];
-    ctx.fillStyle = val > 5 ? '#4ade80' : val > 2 ? '#f59e0b' : '#b91c1c';
-    ctx.fillRect(x - 12 + i * 13, barY, Math.max(2, val / 1.4), 2);
+function spawnChunk(x: number, y: number, baseVx: number, baseVy: number, isAxe = false) {
+  particles.push({
+    x, y,
+    vx: baseVx + (Math.random() - 0.5) * 2.2,
+    vy: baseVy + (Math.random() - 0.5) * 2.2 - 1.1,
+    life: 34 + Math.random() * 22,
+    size: isAxe ? 7 : 5.5 + Math.random() * 2.5,
+    color: isAxe ? '#64748b' : '#3f2a1f',
+    rot: Math.random() * Math.PI * 2,
+    rotSpeed: (Math.random() - 0.5) * 0.35
   });
 }
 
-function drawArena() {
-  // Dark island floor
-  ctx.fillStyle = '#1f2937';
+// Screen shake
+let shake = { x: 0, y: 0 };
+function addShake(amount: number) {
+  shake.x += (Math.random() - 0.5) * amount;
+  shake.y += (Math.random() - 0.5) * amount;
+}
+
+// === MUCH better modern meatling renderer ===
+function drawMeatling(m: any, bodyColor: string, label: string, isPlayer1: boolean) {
+  const { x, y, angle, limbs } = m;
+  const rad = (angle * Math.PI * 2) / 16;
+  const cx = x, cy = y;
+
+  // Slight bob when moving
+  const bob = Math.sin(Date.now() / 140) * 0.6;
+
+  // === Body (chunky, grotesque) ===
+  ctx.save();
+  ctx.translate(cx, cy + bob);
+
+  // Main torso
+  ctx.fillStyle = bodyColor;
   ctx.beginPath();
-  ctx.ellipse(480, 370, 310, 235, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 2, 19, 15, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Subtle shore line
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 3;
+  // Armor plates / ridges for modern look
+  ctx.strokeStyle = '#1f2937';
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.ellipse(480, 370, 318, 242, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 3, 14, 10, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  // A few "powerup" dots (visual only for now)
-  ctx.fillStyle = '#c084fc33';
-  ctx.fillRect(310, 290, 5, 5);
-  ctx.fillRect(640, 430, 5, 5);
-  ctx.fillRect(420, 510, 5, 5);
+  // === HEAD (more characterful) ===
+  const headOffset = 14;
+  const hx = Math.cos(rad) * headOffset;
+  const hy = Math.sin(rad) * headOffset - 1;
+
+  // Head base
+  ctx.fillStyle = limbs.head > 5 ? '#111827' : '#3f2a1f';
+  ctx.beginPath();
+  ctx.arc(hx, hy, 9, 0, Math.PI * 2);
+  ctx.fill();
+
+  // "Toad helmet" / visor detail
+  ctx.fillStyle = limbs.head > 3 ? '#334155' : '#1f2937';
+  ctx.beginPath();
+  ctx.arc(hx + Math.cos(rad) * 2, hy + Math.sin(rad) * 1.5, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye slit glow
+  if (limbs.head > 4) {
+    ctx.fillStyle = isPlayer1 ? '#f472b6' : '#c084fc';
+    ctx.fillRect(hx + Math.cos(rad) * 5 - 1.5, hy + Math.sin(rad) * 3 - 1, 3, 2);
+  }
+
+  // === LEFT ARM (Shield) ===
+  const leftAng = rad - 1.05;
+  const shieldLen = 18;
+  const shieldX = Math.cos(leftAng) * shieldLen;
+  const shieldY = Math.sin(leftAng) * shieldLen;
+
+  if (limbs.leftShield > 1.5) {
+    // Shield arm
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 2);
+    ctx.lineTo(shieldX * 0.65, shieldY * 0.65 + 1);
+    ctx.stroke();
+
+    // Shield plate
+    ctx.fillStyle = limbs.leftShield > 5 ? '#64748b' : '#475569';
+    ctx.beginPath();
+    ctx.ellipse(shieldX, shieldY, 9, 6, leftAng + 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#1e2937';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  } else {
+    // Bloody stump
+    ctx.fillStyle = '#7f1d1d';
+    ctx.beginPath();
+    ctx.arc(Math.cos(leftAng) * 11, Math.sin(leftAng) * 11, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // === RIGHT ARM (Axe / Weapon) ===
+  const rightAng = rad + 1.15;
+  const axeLen = 20;
+  const axeX = Math.cos(rightAng) * axeLen;
+  const axeY = Math.sin(rightAng) * axeLen;
+
+  if (limbs.weapon > 1.5) {
+    // Arm
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 6.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 1);
+    ctx.lineTo(axeX * 0.55, axeY * 0.55);
+    ctx.stroke();
+
+    // Axe handle
+    ctx.strokeStyle = '#1f2937';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(axeX * 0.5, axeY * 0.5);
+    ctx.lineTo(axeX, axeY);
+    ctx.stroke();
+
+    // Axe head (menacing)
+    ctx.fillStyle = limbs.weapon > 6 ? '#94a3b8' : '#64748b';
+    ctx.beginPath();
+    ctx.moveTo(axeX, axeY);
+    ctx.lineTo(axeX + Math.cos(rightAng + 1.4) * 9, axeY + Math.sin(rightAng + 1.4) * 9);
+    ctx.lineTo(axeX + Math.cos(rightAng - 1.1) * 7, axeY + Math.sin(rightAng - 1.1) * 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  } else {
+    // Stump where the axe was
+    ctx.fillStyle = '#7f1d1d';
+    ctx.beginPath();
+    ctx.arc(Math.cos(rightAng) * 12, Math.sin(rightAng) * 12, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // === Label + status ===
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, cx, cy - 28);
+
+  // Health indicator (small but clear)
+  const hp = Math.floor(m.health);
+  ctx.fillStyle = hp > 10 ? '#4ade80' : hp > 5 ? '#fbbf24' : '#ef4444';
+  ctx.fillText(`HP ${hp}`, cx, cy + 32);
+}
+
+function drawArena() {
+  // Water / void around the island
+  ctx.fillStyle = '#0b0c12';
+  ctx.fillRect(0, 0, 960, 720);
+
+  // Island floor (darker, more detailed)
+  ctx.fillStyle = '#1f2937';
+  ctx.beginPath();
+  ctx.ellipse(480, 370, 305, 230, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Lighter ground texture
+  ctx.fillStyle = '#33415522';
+  ctx.beginPath();
+  ctx.ellipse(470, 365, 220, 165, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Shoreline / rocks
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.ellipse(480, 370, 312, 238, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Inner detail line
+  ctx.strokeStyle = '#1e2937';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(475, 362, 265, 195, 0.1, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Scattered debris / powerup hints (yin-yang style)
+  ctx.fillStyle = '#c084fc';
+  ctx.fillRect(295, 275, 4, 4);
+  ctx.fillRect(655, 445, 4, 4);
+  ctx.fillRect(415, 505, 4, 4);
+
+  ctx.fillStyle = '#64748b44';
+  ctx.fillRect(570, 265, 3, 3);
+  ctx.fillRect(340, 470, 3, 3);
 }
 
 function draw() {
+  // Apply screen shake
+  const sx = Math.max(-6, Math.min(6, shake.x));
+  const sy = Math.max(-6, Math.min(6, shake.y));
+  ctx.save();
+  ctx.translate(sx, sy);
+
   ctx.fillStyle = '#0f1116';
   ctx.fillRect(0, 0, 960, 720);
 
   drawArena();
 
-  // Meatlings
-  drawMeatling(game.p1, '#c2410c', 'P1');
-  drawMeatling(game.p2, '#854d0e', game.mode === 'ai' ? 'AI' : 'P2');
+  // Meatlings — much more detailed now
+  drawMeatling(game.p1, '#c2410c', 'P1', true);
+  drawMeatling(game.p2, '#854d0e', game.mode === 'ai' ? 'CPU' : 'P2', false);
 
-  // Blood / gore particles would go here later
+  // === Particles (blood + flying chunks) ===
+  ctx.fillStyle = '#9f1239';
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    const alpha = Math.max(0.1, p.life / 40);
+    ctx.globalAlpha = alpha;
+
+    if (p.rot !== undefined) {
+      // Chunk with rotation (more modern look)
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot!);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.restore(); // end shake
 
   // Win banner
   if (game.winner) {
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
     ctx.fillRect(0, 280, 960, 160);
     ctx.fillStyle = '#f472b6';
-    ctx.font = 'bold 28px monospace';
+    ctx.font = 'bold 32px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`${game.winner.toUpperCase()} WINS`, 480, 340);
+    ctx.fillText(`${game.winner.toUpperCase()} WINS`, 480, 345);
     ctx.font = '14px monospace';
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillText('Press R to fight again', 480, 380);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText('Press R to fight again', 480, 385);
   }
 
-  // Pause
+  // Pause overlay
   if (game.paused) {
-    ctx.fillStyle = 'rgba(15,17,22,0.7)';
+    ctx.fillStyle = 'rgba(15,17,22,0.75)';
     ctx.fillRect(0, 0, 960, 720);
     ctx.fillStyle = '#c084fc';
-    ctx.font = 'bold 24px monospace';
+    ctx.font = 'bold 26px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('PAUSED', 480, 360);
+    ctx.font = '13px monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('ESC to resume', 480, 390);
   }
+
+  // Decay shake
+  shake.x *= 0.82;
+  shake.y *= 0.82;
+  if (Math.abs(shake.x) < 0.3) shake.x = 0;
+  if (Math.abs(shake.y) < 0.3) shake.y = 0;
 }
 
 function updateStatus() {
@@ -139,12 +328,52 @@ function loop(now: number) {
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
+  // Store previous health to detect big damage
+  const prevP1 = game.p1.health;
+  const prevP2 = game.p2.health;
+
   game.update(dt);
+
+  // === Visual feedback: blood + shake when someone gets hurt ===
+  if (game.p1.health < prevP1 - 0.3) {
+    spawnBlood(game.p1.x + (Math.random() - 0.5) * 18, game.p1.y + (Math.random() - 0.5) * 14, 5 + Math.random() * 4);
+    addShake(2.8);
+  }
+  if (game.p2.health < prevP2 - 0.3) {
+    spawnBlood(game.p2.x + (Math.random() - 0.5) * 18, game.p2.y + (Math.random() - 0.5) * 14, 5 + Math.random() * 4);
+    addShake(2.8);
+  }
+
+  // Big dramatic moments (limb sever)
+  if (game.p1.limbs.weapon < 2 && prevP1 > game.p1.health + 1) {
+    spawnChunk(game.p1.x + 12, game.p1.y, 2.5, -1.8, true);
+    addShake(5.5);
+  }
+  if (game.p2.limbs.weapon < 2 && prevP2 > game.p2.health + 1) {
+    spawnChunk(game.p2.x - 12, game.p2.y, -2.8, -1.6, true);
+    addShake(5.5);
+  }
+
+  // Update particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.985;
+    p.vy += 0.14; // gravity
+    p.life -= 1;
+
+    if (p.rot !== undefined && p.rotSpeed) p.rot! += p.rotSpeed;
+
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
   draw();
   updateStatus();
 
   // Keyboard commands
   if (input.justPressed('r')) {
+    particles = [];
     game.reset();
   }
   if (input.justPressed('m')) {
@@ -153,9 +382,9 @@ function loop(now: number) {
   if (input.justPressed('escape')) {
     game.togglePause();
   }
-  // Toggle AI / 2P with T
   if (input.justPressed('t')) {
     game.mode = game.mode === 'ai' ? 'pvp' : 'ai';
+    particles = [];
     game.reset();
   }
 
