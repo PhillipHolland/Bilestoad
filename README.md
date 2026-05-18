@@ -37,6 +37,16 @@ We kept the original's crunchy independent-arm combat and dismemberment focus, b
 
 Sound is 100% procedural via Web Audio API — no external files.
 
+## What's New (iterative improvements toward "amazing")
+
+- **Major AI overhaul**: The CPU is now a smart, threatening opponent that circles, flanks, uses both arms, respects its damage state, and *actually lands hits*.
+- **Combat juice & consequences**: Limb damage has real mechanical effects (slower turns, weaker attacks, longer cooldowns). Swings have commitment.
+- **Rich visuals & animations**: Detailed meatling art, visible arm chops & shield bashes with recoil, directional hit flinching, dynamic blood stains, rotating limb chunks, screen shake.
+- **Audio upgrade**: Layered, powerful, distinct whooshes, meaty impacts, horrifying severs + constant dark ambient island drone.
+- **New system — Soul Orbs**: 4 strategic glowing pickups around the island heal damaged limbs. Both you and the AI fight over them. Adds positioning depth and tension.
+
+The game is being iteratively driven toward a high-quality, satisfying modern tribute. Pull often!
+
 ## Credits
 
 Original game © 1982 Datamost / Marc Goodman  
