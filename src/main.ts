@@ -72,9 +72,11 @@ function drawMeatling(m: any, bodyColor: string, label: string, isPlayer1: boole
   const hitFlinch = Math.max(0, 1 - ((m.lastHitTime || 999) / 10));
   const flinchTilt = hitFlinch * 0.22 * Math.sin(((m.hitAngle || 0) + 1) * 2.1);
 
-  // === Body (chunky, grotesque) ===
+  // === Body (now significantly larger for readability) ===
+  const s = 1.9; // scale factor — characters are now much easier to read
   ctx.save();
   ctx.translate(cx, cy + bob);
+  ctx.scale(s, s);
 
   // Hit reaction: whole body leans away from the blow
   if (hitFlinch > 0.05) {

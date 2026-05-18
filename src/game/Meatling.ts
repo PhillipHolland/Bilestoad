@@ -15,7 +15,8 @@ export interface MeatlingState {
 export class Meatling {
   x: number;
   y: number;
-  angle: number;          // 0–15
+  angle: number = 0;      // radians (continuous, for good feel)
+  angleVel = 0;
   vx = 0;
   vy = 0;
 
@@ -53,9 +54,9 @@ export class Meatling {
   }
 
   // === Mechanical consequences of losing limbs (this is what makes it deep) ===
-  get turnSpeed(): number {
+  get turnRate(): number {
     const shieldFactor = (this.limbs.leftShield + this.limbs.rightShield) / 22;
-    return 0.65 + shieldFactor * 0.55; // badly damaged shields = slower turning
+    return 0.032 + shieldFactor * 0.028; // much slower, more controllable base rate
   }
 
   get moveSpeed(): number {
@@ -74,23 +75,38 @@ export class Meatling {
 
   // Apply an action mask (from Input)
   applyActions(mask: number, dt: number) {
-    const turnSpeed = this.turnSpeed;
+    const turnRate = this.turnRate;
     const moveSpeed = this.moveSpeed;
 
-    // Turning (now affected by shield damage)
-    if (mask & (1 << 4)) this.angle = (this.angle - turnSpeed) & 15;
-    if (mask & (1 << 5)) this.angle = (this.angle + turnSpeed) & 15;
+    // === Momentum-based turning (much more controllable and weighty) ===
+    const turnInput = (mask & (1 << 4)) ? -1 : (mask & (1 << 5)) ? 1 : 0;
+
+    if (turnInput !== 0) {
+      this.angleVel += turnInput * turnRate * 1.7;
+    } else {
+      this.angleVel *= 0.74; // natural damping
+    }
+
+    // clamp max turning speed
+    const maxAngVel = 0.17;
+    this.angleVel = Math.max(-maxAngVel, Math.min(maxAngVel, this.angleVel));
+
+    this.angle += this.angleVel;
+
+    // normalize angle
+    if (this.angle < 0) this.angle += Math.PI * 2;
+    if (this.angle >= Math.PI * 2) this.angle -= Math.PI * 2;
 
     // Thrust / movement (affected by torso + leg damage)
     const moving = !!(mask & (1 << 6));
-    const rad = (this.angle * Math.PI * 2) / 16;
+    const rad = this.angle;
 
     if (moving) {
       this.vx += Math.cos(rad) * moveSpeed * 0.85;
       this.vy += Math.sin(rad) * moveSpeed * 0.85;
     }
 
-    // Apply velocity + friction (slightly less slippery when healthy)
+    // Apply velocity + friction
     const friction = 0.79 + (this.limbs.torso / 14) * 0.07;
     this.x += this.vx * dt * 60;
     this.y += this.vy * dt * 60;
@@ -192,7 +208,7 @@ export class Meatling {
     const diff = ((targetAngle - this.angle + 8) & 15) - 8;
 
     // Use our own damaged stats for fair play
-    const turn = this.turnSpeed;
+    const turn = this.turnRate * 1.4;
     const moveSpd = this.moveSpeed;
     const myWeapon = this.limbs.weapon;
     const myHealth = this.health;
