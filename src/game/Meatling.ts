@@ -1,5 +1,7 @@
 // The heart of Bilestoad — a grotesque meatling with independently damaged limbs
 
+import { ACTIONS } from './Input';
+
 export type Limb = 'head' | 'torso' | 'leftShield' | 'rightShield' | 'leftArm' | 'weapon';
 
 export interface MeatlingState {
@@ -155,57 +157,110 @@ export class Meatling {
     }
   }
 
-  // Improved AI — tries to be threatening instead of just randomly swinging
-  think(target: Meatling, dt: number, aggression = 1) {
+  // Significantly upgraded AI — now a real opponent that positions well, uses both arms,
+  // respects its own damage state, circles intelligently, and actually lands hits.
+  think(target: Meatling, dt: number, baseAggression = 1.0): number {
     const dx = target.x - this.x;
     const dy = target.y - this.y;
-    const dist = Math.hypot(dx, dy);
-    const desired = (Math.atan2(dy, dx) / (Math.PI * 2) * 16 + 8) & 15;
+    const dist = Math.hypot(dx, dy) || 1;
 
-    const diff = ((desired - this.angle + 8) & 15) - 8;
+    // Tick cooldowns ourselves (AI path bypasses applyActions)
+    if (this.leftSwingCooldown > 0) this.leftSwingCooldown -= dt * 60;
+    if (this.rightSwingCooldown > 0) this.rightSwingCooldown -= dt * 60;
 
-    // Smarter turning (respects its own damaged turn speed)
+    const targetAngle = (Math.atan2(dy, dx) / (Math.PI * 2) * 16 + 8) & 15;
+
+    const diff = ((targetAngle - this.angle + 8) & 15) - 8;
+
+    // Use our own damaged stats for fair play
     const turn = this.turnSpeed;
-    if (diff > 1) this.angle = (this.angle + turn) & 15;
-    else if (diff < -1) this.angle = (this.angle - turn) & 15;
+    const moveSpd = this.moveSpeed;
+    const myWeapon = this.limbs.weapon;
+    const myHealth = this.health;
 
-    // === Smarter behavior ===
-    const myWeaponHealth = this.limbs.weapon;
-    const wantToAttack = myWeaponHealth > 4 && this.rightSwingCooldown <= 2;
+    // Dynamic aggression based on our weapon health + how crippled the target is
+    const targetWeaponWeak = target.limbs.weapon < 6;
+    const aggression = Math.max(0.55, baseAggression * (0.65 + (myWeapon / 13) * 0.7 + (targetWeaponWeak ? 0.45 : 0) - (myHealth < 6 ? 0.3 : 0)));
 
-    if (dist > 195) {
-      // Close the distance
-      this.vx += Math.cos((this.angle * Math.PI * 2) / 16) * 1.35 * aggression;
-      this.vy += Math.sin((this.angle * Math.PI * 2) / 16) * 1.35 * aggression;
-    } else if (dist < 82 && !wantToAttack) {
-      // Back off to create space for a good swing
-      this.vx -= Math.cos((this.angle * Math.PI * 2) / 16) * 1.0;
-      this.vy -= Math.sin((this.angle * Math.PI * 2) / 16) * 1.0;
-    } else if (dist < 115 && wantToAttack) {
-      // Good range — try to circle for a better angle instead of rushing
-      const side = Math.sin(diff * 0.4) * 0.9;
-      this.vx += Math.cos((this.angle * Math.PI * 2) / 16) * 0.6 + side;
-      this.vy += Math.sin((this.angle * Math.PI * 2) / 16) * 0.6 + side * 0.6;
-    }
+    let swingMask = 0;
 
-    // Apply movement
-    this.x += this.vx * dt * 60;
-    this.y += this.vy * dt * 60;
-    this.vx *= 0.84;
-    this.vy *= 0.84;
+    // === Responsive turning (penalized by shield damage) ===
+    if (diff > 1.1) this.angle = (this.angle + turn) & 15;
+    else if (diff < -1.1) this.angle = (this.angle - turn) & 15;
 
-    // Occasional smart swings when in good position
-    if (dist > 58 && dist < 125 && wantToAttack && Math.random() < 0.09) {
-      const which = myWeaponHealth > 8 ? 'rightIn' : 'rightOut';
-      if (this.swing(which)) {
-        // will be picked up by Game
+    // === Intelligent swing decisions (we return mask; Game will execute swing + damage) ===
+    const goodAngle = Math.abs(diff) < 2.8;
+    const canRightSwing = this.rightSwingCooldown <= 0.7 && myWeapon > 3.2;
+    const canLeftSwing = this.leftSwingCooldown <= 0.5 && (this.limbs.leftShield > 2.2 || this.limbs.leftArm > 2);
+
+    // Right (axe) swings — primary threat, committed when angle + range good
+    if (dist > 46 && dist < 142 && canRightSwing) {
+      let chance = goodAngle ? 0.22 : 0.055;
+      if (dist < 82) chance *= 1.25; // closer = more desperate/aggressive
+      if (Math.random() < chance * (aggression * 0.9 + 0.25)) {
+        swingMask |= (myWeapon > 7.5 ? ACTIONS.RIGHT_IN : ACTIONS.RIGHT_OUT);
       }
     }
 
-    // Clamp
-    const margin = 38;
+    // Left (shield) arm — faster pokes, good for pressure or when right arm tired
+    if (dist < 98 && canLeftSwing) {
+      const leftChance = (this.rightSwingCooldown > 4 ? 0.28 : 0.09) * (goodAngle ? 1.1 : 0.7);
+      if (Math.random() < leftChance) {
+        swingMask |= ACTIONS.LEFT_IN;
+      }
+    }
+
+    // === Movement & positioning: circle, kite, flank ===
+    const rad = (this.angle * Math.PI * 2) / 16;
+    const forwardX = Math.cos(rad);
+    const forwardY = Math.sin(rad);
+    const sideX = -forwardY;   // perpendicular for strafing
+    const sideY = forwardX;
+
+    let mx = 0;
+    let my = 0;
+
+    const ideal = 82 + (myWeapon > 9 ? 18 : 4);  // preferred engagement distance
+
+    if (dist > ideal + 52) {
+      // Rush to engage
+      mx = forwardX * 1.55 * aggression * moveSpd;
+      my = forwardY * 1.55 * aggression * moveSpd;
+    } else if (dist < 52) {
+      // Too close: strafe sideways hard + slight backpedal for swing space
+      mx = sideX * 1.25 * moveSpd + forwardX * (-0.75);
+      my = sideY * 1.25 * moveSpd + forwardY * (-0.75);
+    } else if (dist < ideal + 22) {
+      // Sweet spot: circle for flank shots, apply side pressure
+      const flankBias = Math.sin(diff * 0.85) * (targetWeaponWeak ? 1.4 : 1.0);
+      mx = forwardX * 0.48 + sideX * flankBias * 1.3;
+      my = forwardY * 0.48 + sideY * flankBias * 1.3;
+      if (goodAngle && Math.random() < 0.55) {
+        mx += forwardX * 0.55 * moveSpd * 0.65;
+        my += forwardY * 0.55 * moveSpd * 0.65;
+      }
+    } else {
+      // Hold good distance while threatening
+      mx = forwardX * 0.82 * moveSpd * aggression;
+      my = forwardY * 0.82 * moveSpd * aggression;
+    }
+
+    // Apply thrust + integrate with realistic friction from torso health
+    this.vx += mx * 0.92;
+    this.vy += my * 0.92;
+
+    const friction = 0.815 + (this.limbs.torso / 14) * 0.065;
+    this.x += this.vx * dt * 60;
+    this.y += this.vy * dt * 60;
+    this.vx *= friction;
+    this.vy *= friction;
+
+    // Arena clamp
+    const margin = 42;
     this.x = Math.max(margin, Math.min(960 - margin, this.x));
     this.y = Math.max(margin, Math.min(720 - margin, this.y));
+
+    return swingMask;
   }
 
   reset(x: number, y: number, angle = 0) {

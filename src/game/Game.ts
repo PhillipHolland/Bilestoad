@@ -39,8 +39,9 @@ export class Game {
     this.p1.applyActions(input.getP1(), dt);
 
     // Player 2 / AI
+    let p2SwingMask = 0;
     if (this.mode === 'ai') {
-      this.p2.think(this.p1, dt, 1.0);
+      p2SwingMask = this.p2.think(this.p1, dt, 1.0);
     } else {
       this.p2.applyActions(input.getP2(), dt);
     }
@@ -49,7 +50,7 @@ export class Game {
     this.handleSwings(this.p1, this.p2, input.getP1());
 
     // Swing processing for P2/AI
-    const p2Mask = this.mode === 'ai' ? 0 : input.getP2();
+    const p2Mask = this.mode === 'ai' ? p2SwingMask : input.getP2();
     this.handleSwings(this.p2, this.p1, p2Mask);
 
     // Simple collision between meatlings (push apart)
