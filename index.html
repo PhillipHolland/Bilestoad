@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bilestoad • 2025</title>
+    <meta name="description" content="Modern reimagining of the 1982 Apple II classic — brutal top-down axe combat with dismemberment." />
+  </head>
+  <body>
+    <div id="game-container">
+      <canvas id="game" width="960" height="720"></canvas>
+      
+      <div id="overlay">
+        <div id="title">BILESTOAD</div>
+        <div id="subtitle">A 1982 Apple II game • Reborn in the browser</div>
+        
+        <div id="instructions">
+          <div class="controls">
+            <div><strong>Player 1</strong></div>
+            <div>WASD — Move &amp; face</div>
+            <div>J / K — Left arm (shield) swings</div>
+            <div>L / ; — Right arm (axe) swings</div>
+          </div>
+          <div class="controls">
+            <div><strong>Player 2</strong> (hotseat)</div>
+            <div>Arrows — Move &amp; face</div>
+            <div>U / I — Left arm swings</div>
+            <div>O / P — Right arm swings</div>
+          </div>
+        </div>
+
+        <div id="status">
+          <span id="p1-status">P1: Alive</span>
+          <span id="mode">vs AI</span>
+          <span id="p2-status">P2: Alive</span>
+        </div>
+        
+        <div id="hint">Press <strong>R</strong> to restart • <strong>M</strong> to toggle sound • <strong>ESC</strong> pause</div>
+      </div>
+    </div>
+    
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

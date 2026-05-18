@@ -1,0 +1,16 @@
+{
+  "name": "bilestoad",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A modern browser reimagining of the 1982 Apple II classic — top-down axe combat with dismemberment",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2",
+    "vite": "^5.4.8"
+  }
+}
