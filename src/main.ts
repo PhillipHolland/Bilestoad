@@ -278,6 +278,41 @@ function drawArena() {
   ctx.fillRect(520, 455, 6, 3);
 }
 
+function drawPowerups() {
+  for (const p of game.powerups) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+
+    // Outer glow
+    ctx.fillStyle = 'rgba(192, 132, 252, 0.35)';
+    ctx.beginPath();
+    ctx.arc(0, 0, p.r + 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Core orb
+    ctx.fillStyle = '#c084fc';
+    ctx.beginPath();
+    ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bright inner core
+    ctx.fillStyle = '#e0b3ff';
+    ctx.beginPath();
+    ctx.arc(0, 0, p.r * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pulsing ring
+    const pulse = Math.sin(Date.now() / 160) * 2.5;
+    ctx.strokeStyle = '#a855f7';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, p.r + 4 + pulse, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+}
+
 function draw() {
   // Apply screen shake
   const sx = Math.max(-6, Math.min(6, shake.x));
@@ -289,6 +324,9 @@ function draw() {
   ctx.fillRect(0, 0, 960, 720);
 
   drawArena();
+
+  // Collectible powerup orbs (strategic depth)
+  drawPowerups();
 
   // Meatlings — much more detailed now
   drawMeatling(game.p1, '#c2410c', 'P1', true);
@@ -374,6 +412,16 @@ function loop(now: number) {
   const prevP2 = game.p2.health;
 
   game.update(dt);
+
+  // Powerup collection (strategic healing orbs)
+  if (game.tryCollectPowerup(game.p1.x, game.p1.y, 19)) {
+    spawnBlood(game.p1.x, game.p1.y, 8 + Math.random() * 3, 2.5);
+    addShake(1.6);
+  }
+  if (game.tryCollectPowerup(game.p2.x, game.p2.y, 19)) {
+    spawnBlood(game.p2.x, game.p2.y, 8 + Math.random() * 3, 2.5);
+    addShake(1.4);
+  }
 
   // === Visual feedback: blood + shake when someone gets hurt ===
   if (game.p1.health < prevP1 - 0.3) {

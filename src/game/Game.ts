@@ -19,8 +19,11 @@ export class Game {
   winner: 'p1' | 'p2' | null = null;
   paused = false;
 
+  // Collectible soul orbs on the island — strategic healing pickups
+  powerups: Array<{ x: number; y: number; r: number }> = [];
+
   constructor() {
-    // nothing
+    this.powerups = this.spawnPowerups();
   }
 
   reset() {
@@ -28,6 +31,29 @@ export class Game {
     this.p2.reset(700, 360, 2);
     this.winner = null;
     this.frame = 0;
+    this.powerups = this.spawnPowerups();
+  }
+
+  private spawnPowerups() {
+    // Strategic positions around the arena (not too close to start)
+    return [
+      { x: 310, y: 265, r: 12 },
+      { x: 650, y: 475, r: 12 },
+      { x: 470, y: 535, r: 11 },
+      { x: 530, y: 220, r: 10 },
+    ];
+  }
+
+  // Returns true if a powerup was collected (caller can spawn particles / sound)
+  tryCollectPowerup(x: number, y: number, radius: number): boolean {
+    for (let i = this.powerups.length - 1; i >= 0; i--) {
+      const p = this.powerups[i];
+      if (Math.hypot(p.x - x, p.y - y) < p.r + radius) {
+        this.powerups.splice(i, 1);
+        return true;
+      }
+    }
+    return false;
   }
 
   update(dt: number) {
