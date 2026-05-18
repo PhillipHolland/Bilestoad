@@ -32,6 +32,10 @@ export class Meatling {
   // Combat state for juice
   leftSwingCooldown = 0;
   rightSwingCooldown = 0;
+  leftSwingTime = 0;   // frames since last left swing (for animation)
+  rightSwingTime = 0;  // frames since last right swing
+  lastHitTime = 999;   // frames since last damage taken (for flinch)
+  hitAngle = 0;        // world angle of last incoming hit (for directional flinch)
 
   constructor(x: number, y: number, angle = 0) {
     this.x = x;
@@ -101,6 +105,11 @@ export class Meatling {
     // Tick down swing cooldowns
     if (this.leftSwingCooldown > 0) this.leftSwingCooldown -= dt * 60;
     if (this.rightSwingCooldown > 0) this.rightSwingCooldown -= dt * 60;
+
+    // Tick animation timers
+    this.leftSwingTime += dt * 60;
+    this.rightSwingTime += dt * 60;
+    this.lastHitTime += dt * 60;
   }
 
   // Swing one of the four arm actions. Returns true if the swing actually happened.
@@ -118,6 +127,7 @@ export class Meatling {
       // Cooldown is longer if your shield arm is damaged
       const penalty = this.canUseShield ? 1 : 1.6;
       this.leftSwingCooldown = 11 * penalty;
+      this.leftSwingTime = 0;
       return true;
     } else {
       if (this.rightSwingCooldown > 0) return false;
@@ -128,6 +138,7 @@ export class Meatling {
 
       const penalty = Math.max(0.7, this.attackPower / 2.2);
       this.rightSwingCooldown = 14 / penalty; // weaker weapon arm = slower swings
+      this.rightSwingTime = 0;
       return true;
     }
   }
@@ -155,6 +166,10 @@ export class Meatling {
       const k = keys[Math.floor(Math.random() * keys.length)];
       this.limbs[k] = Math.max(0, this.limbs[k] - 3);
     }
+
+    // Record hit for visual flinch / reaction juice
+    this.lastHitTime = 0;
+    this.hitAngle = hitAngle;
   }
 
   // Significantly upgraded AI — now a real opponent that positions well, uses both arms,
@@ -164,9 +179,13 @@ export class Meatling {
     const dy = target.y - this.y;
     const dist = Math.hypot(dx, dy) || 1;
 
-    // Tick cooldowns ourselves (AI path bypasses applyActions)
+    // Tick cooldowns + animation timers ourselves (AI path bypasses applyActions)
     if (this.leftSwingCooldown > 0) this.leftSwingCooldown -= dt * 60;
     if (this.rightSwingCooldown > 0) this.rightSwingCooldown -= dt * 60;
+
+    this.leftSwingTime += dt * 60;
+    this.rightSwingTime += dt * 60;
+    this.lastHitTime += dt * 60;
 
     const targetAngle = (Math.atan2(dy, dx) / (Math.PI * 2) * 16 + 8) & 15;
 
@@ -269,5 +288,8 @@ export class Meatling {
     this.limbs = { head: 14, torso: 14, leftShield: 12, rightShield: 10, leftArm: 11, weapon: 13 };
     this.leftSwingCooldown = 0;
     this.rightSwingCooldown = 0;
+    this.leftSwingTime = 999;
+    this.rightSwingTime = 999;
+    this.lastHitTime = 999;
   }
 }

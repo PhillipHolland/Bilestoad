@@ -66,9 +66,20 @@ function drawMeatling(m: any, bodyColor: string, label: string, isPlayer1: boole
   // Slight bob when moving
   const bob = Math.sin(Date.now() / 140) * 0.6;
 
+  // === Animation juice from model: swing recoil/telegraph + directional hit flinch ===
+  const lSwing = Math.max(0, 1 - ((m.leftSwingTime || 999) / 13));   // peaks right after swing
+  const rSwing = Math.max(0, 1 - ((m.rightSwingTime || 999) / 16));
+  const hitFlinch = Math.max(0, 1 - ((m.lastHitTime || 999) / 10));
+  const flinchTilt = hitFlinch * 0.22 * Math.sin(((m.hitAngle || 0) + 1) * 2.1);
+
   // === Body (chunky, grotesque) ===
   ctx.save();
   ctx.translate(cx, cy + bob);
+
+  // Hit reaction: whole body leans away from the blow
+  if (hitFlinch > 0.05) {
+    ctx.rotate(flinchTilt);
+  }
 
   // Main torso
   ctx.fillStyle = bodyColor;
@@ -82,6 +93,23 @@ function drawMeatling(m: any, bodyColor: string, label: string, isPlayer1: boole
   ctx.beginPath();
   ctx.ellipse(0, 3, 14, 10, 0, 0, Math.PI * 2);
   ctx.stroke();
+
+  // Grotesque damage: blood stains when torso or head badly hurt
+  if (limbs.torso < 7) {
+    ctx.fillStyle = '#7f1d1d';
+    ctx.beginPath();
+    ctx.arc(-5, 4, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(3, -2, 2.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (limbs.head < 6) {
+    ctx.fillStyle = '#9f1239';
+    ctx.beginPath();
+    ctx.arc(0, -5, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // === HEAD (more characterful) ===
   const headOffset = 14;
@@ -107,25 +135,26 @@ function drawMeatling(m: any, bodyColor: string, label: string, isPlayer1: boole
   }
 
   // === LEFT ARM (Shield) ===
-  const leftAng = rad - 1.05;
-  const shieldLen = 18;
+  // Animated shield bash: extends + rotates on recent swing
+  const leftAng = rad - 1.05 + lSwing * 0.85;
+  const shieldLen = 18 + lSwing * 4.5;
   const shieldX = Math.cos(leftAng) * shieldLen;
   const shieldY = Math.sin(leftAng) * shieldLen;
 
   if (limbs.leftShield > 1.5) {
-    // Shield arm
+    // Shield arm (punchier when swinging)
     ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 7;
+    ctx.lineWidth = 7 + lSwing * 1.2;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(0, 2);
     ctx.lineTo(shieldX * 0.65, shieldY * 0.65 + 1);
     ctx.stroke();
 
-    // Shield plate
+    // Shield plate (thrust forward on swing)
     ctx.fillStyle = limbs.leftShield > 5 ? '#64748b' : '#475569';
     ctx.beginPath();
-    ctx.ellipse(shieldX, shieldY, 9, 6, leftAng + 0.6, 0, Math.PI * 2);
+    ctx.ellipse(shieldX, shieldY, 9 + lSwing * 1.5, 6 + lSwing * 0.8, leftAng + 0.6, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#1e2937';
     ctx.lineWidth = 1.5;
@@ -139,15 +168,16 @@ function drawMeatling(m: any, bodyColor: string, label: string, isPlayer1: boole
   }
 
   // === RIGHT ARM (Axe / Weapon) ===
-  const rightAng = rad + 1.15;
-  const axeLen = 20;
+  // Powerful chop animation: axe swings forward + extends on rSwing for juicy impact feel
+  const rightAng = rad + 1.15 - rSwing * 1.45;  // chop rotates the swing arc
+  const axeLen = 20 + rSwing * 7;
   const axeX = Math.cos(rightAng) * axeLen;
   const axeY = Math.sin(rightAng) * axeLen;
 
   if (limbs.weapon > 1.5) {
-    // Arm
+    // Arm (thickens on power swing)
     ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 6.5;
+    ctx.lineWidth = 6.5 + rSwing * 2.2;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(0, 1);
@@ -156,18 +186,19 @@ function drawMeatling(m: any, bodyColor: string, label: string, isPlayer1: boole
 
     // Axe handle
     ctx.strokeStyle = '#1f2937';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3 + rSwing * 0.6;
     ctx.beginPath();
     ctx.moveTo(axeX * 0.5, axeY * 0.5);
     ctx.lineTo(axeX, axeY);
     ctx.stroke();
 
-    // Axe head (menacing)
+    // Axe head — more menacing and extended during the chop
     ctx.fillStyle = limbs.weapon > 6 ? '#94a3b8' : '#64748b';
+    const chop = rSwing * 1.6;
     ctx.beginPath();
     ctx.moveTo(axeX, axeY);
-    ctx.lineTo(axeX + Math.cos(rightAng + 1.4) * 9, axeY + Math.sin(rightAng + 1.4) * 9);
-    ctx.lineTo(axeX + Math.cos(rightAng - 1.1) * 7, axeY + Math.sin(rightAng - 1.1) * 7);
+    ctx.lineTo(axeX + Math.cos(rightAng + 1.4 + chop * 0.3) * (9 + chop * 2), axeY + Math.sin(rightAng + 1.4 + chop * 0.3) * (9 + chop * 2));
+    ctx.lineTo(axeX + Math.cos(rightAng - 1.1 - chop * 0.2) * (7 + chop), axeY + Math.sin(rightAng - 1.1 - chop * 0.2) * (7 + chop));
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = '#0f172a';
@@ -235,6 +266,16 @@ function drawArena() {
   ctx.fillStyle = '#64748b44';
   ctx.fillRect(570, 265, 3, 3);
   ctx.fillRect(340, 470, 3, 3);
+
+  // Extra island gore flavor: bones, rocks, old blood
+  ctx.fillStyle = '#47556955';
+  ctx.fillRect(380, 310, 7, 3);
+  ctx.fillRect(590, 430, 5, 4);
+  ctx.fillRect(310, 440, 4, 6);
+
+  ctx.fillStyle = '#3f2a1f66';
+  ctx.fillRect(450, 280, 8, 2);
+  ctx.fillRect(520, 455, 6, 3);
 }
 
 function draw() {
