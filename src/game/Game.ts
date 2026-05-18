@@ -40,12 +40,7 @@ export class Game {
 
     // Player 2 / AI
     if (this.mode === 'ai') {
-      this.p2.think(this.p1, dt, 0.95);
-      // Occasional random swings from the AI
-      if (Math.random() < 0.065) {
-        const which = Math.random() < 0.5 ? 'rightIn' : 'leftOut';
-        if (this.p2.swing(which)) audio.swing(which.startsWith('left') ? 'left' : 'right');
-      }
+      this.p2.think(this.p1, dt, 1.0);
     } else {
       this.p2.applyActions(input.getP2(), dt);
     }
@@ -88,28 +83,37 @@ export class Game {
   private handleSwings(attacker: Meatling, defender: Meatling, mask: number) {
     let swung = false;
     let arm: 'left' | 'right' = 'right';
+    let power = 1.0;
 
     if (mask & ACTIONS.LEFT_IN || mask & ACTIONS.LEFT_OUT) {
-      if (attacker.swing('leftIn')) { swung = true; arm = 'left'; }
+      if (attacker.swing('leftIn')) {
+        swung = true;
+        arm = 'left';
+        power = 0.85; // shield arm hits are weaker
+      }
     }
     if (mask & ACTIONS.RIGHT_IN || mask & ACTIONS.RIGHT_OUT) {
-      if (attacker.swing('rightIn')) { swung = true; arm = 'right'; }
+      if (attacker.swing('rightIn')) {
+        swung = true;
+        arm = 'right';
+        power = attacker.attackPower; // real weapon power
+      }
     }
 
     if (swung) {
       audio.swing(arm);
 
-      // Check if the swing connects
       const dist = Math.hypot(attacker.x - defender.x, attacker.y - defender.y);
-      if (dist < 68) {
+      if (dist < 72) {
         const hitAngle = Math.atan2(defender.y - attacker.y, defender.x - attacker.x);
-        const dmg = arm === 'right' ? 2.8 : 1.9; // axe hurts more
+        const dmg = (arm === 'right' ? 2.6 : 1.7) * power;
+
         defender.takeDamage(dmg, hitAngle);
 
         audio.hit(dmg);
 
-        // Chance to sever something dramatic
-        if (Math.random() < 0.22) {
+        // More dramatic sever chance when hitting with real power
+        if (dmg > 3.2 && Math.random() < 0.28) {
           audio.limbSever();
         }
       }
